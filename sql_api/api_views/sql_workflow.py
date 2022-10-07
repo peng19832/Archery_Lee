@@ -7,16 +7,26 @@
 """
 __author__ = "hhyo"
 
+import django_filters
 from django.contrib.auth.decorators import permission_required
 from django.utils.decorators import method_decorator
-from drf_spectacular.utils import extend_schema
-from rest_framework import views, permissions, serializers
+from drf_spectacular.utils import extend_schema, extend_schema_view
+from rest_framework import views, permissions, serializers, viewsets, filters
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from sql.engines import get_engine
+from sql.models import SqlWorkflow
+from sql.utils.resource_group import user_groups
+from sql_api.filters import SqlWorkflowFilter
+from sql_api.pagination import BootStrapTablePagination
+from sql_api.permissions.sql_workflow import SqlWorkFlowViewPermission
 from sql_api.serializers.sql_workflow import (
     ExecuteCheckSerializer,
     ExecuteCheckResultSerializer,
+    SqlWorkflowSerializer,
+    SqlWorkflowDetailSerializer,
 )
 
 
@@ -46,3 +56,61 @@ class ExecuteCheck(views.APIView):
         check_result.rows = check_result.to_dict()
         serializer_obj = ExecuteCheckResultSerializer(check_result)
         return Response(serializer_obj.data)
+
+
+@extend_schema_view(
+    list=extend_schema(
+        summary="SQL工单列表",
+        description="获取SQL工单列表，支持筛选、分页、检索等",
+        request=SqlWorkflowSerializer,
+        responses={200: SqlWorkflowSerializer},
+    ),
+    retrieve=extend_schema(
+        summary="SQL工单详情",
+        description="通过工单ID获取工单详情",
+        responses={200: SqlWorkflowDetailSerializer},
+    ),
+)
+class SqlWorkflowView(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated, SqlWorkFlowViewPermission]
+    pagination_class = BootStrapTablePagination
+    filter_backends = [
+        filters.SearchFilter,
+        django_filters.rest_framework.DjangoFilterBackend,
+    ]
+    filterset_class = SqlWorkflowFilter
+    search_fields = ["engineer_display", "workflow_name"]
+
+    def get_queryset(self):
+        """
+        1、非管理员，拥有审核权限、资源组粒度执行权限的，可以查看组内所有工单
+        2、管理员，审计员，可查看所有工单
+        """
+        filter_dict = {}
+        user = self.request.user
+        # 管理员，审计员，可查看所有工单
+        if user.is_superuser or user.has_perm("sql.audit_user"):
+            pass
+        # 非管理员，拥有审核权限、资源组粒度执行权限的，可以查看组内所有工单
+        elif user.has_perm("sql.sql_review") or user.has_perm(
+                "sql.sql_execute_for_resource_group"
+        ):
+            filter_dict["group_id__in"] = [
+                group.group_id for group in user_groups(user)
+            ]
+        # 其他人只能查看自己提交的工单
+        else:
+            filter_dict["engineer"] = user.username
+        queryset = SqlWorkflow.objects.filter(**filter_dict).order_by("-id")
+        return self.get_serializer_class().setup_eager_loading(queryset)
+
+    def get_serializer_class(self):
+        if self.action not in ["create"]:
+            return SqlWorkflowDetailSerializer
+        return SqlWorkflowSerializer
+
+    @action(methods=['get'], detail=True)
+    def rollback_sql(self, request, *args, **kwargs):
+        obj = self.get_object()
+        data = self.get_serializer().rollback_sql(obj)
+        return Response(data)

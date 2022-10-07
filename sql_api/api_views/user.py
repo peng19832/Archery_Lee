@@ -13,7 +13,7 @@ from sql_api.serializers.serializers import (
     TwoFAStateSerializer,
 )
 from sql_api.pagination import CustomizedPagination
-from sql_api.permissions import IsOwner
+from sql_api.permissions.common import IsOwner
 from sql_api.filters import UserFilter
 from django_redis import get_redis_connection
 from django.contrib.auth.models import Group

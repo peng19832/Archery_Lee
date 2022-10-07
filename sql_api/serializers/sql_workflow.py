@@ -7,10 +7,19 @@
 """
 __author__ = "hhyo"
 
+import logging
 
+logger = logging.getLogger("default")
+
+import traceback
+
+import simplejson as json
+from drf_spectacular.utils import extend_schema_field, inline_serializer
 from rest_framework import serializers
 
-from sql.models import Instance
+from sql.engines import ReviewSet, get_engine
+from sql.engines.models import ReviewResult
+from sql.models import Instance, SqlWorkflow
 
 
 class ExecuteCheckSerializer(serializers.Serializer):
@@ -43,3 +52,88 @@ class ExecuteCheckResultSerializer(serializers.Serializer):
     column_list = serializers.JSONField(read_only=True)
     status = serializers.CharField(read_only=True)
     affected_rows = serializers.IntegerField(read_only=True)
+
+
+class SqlWorkflowSerializer(serializers.ModelSerializer):
+    """SQL工单"""
+
+    instance_name = serializers.CharField(source="instance.instance_name")
+
+    @staticmethod
+    def setup_eager_loading(queryset):
+        """
+        Perform necessary eager loading of data.
+        https://ses4j.github.io/2015/11/23/optimizing-slow-django-rest-framework-performance/
+        """
+        queryset = queryset.select_related("instance")
+        return queryset
+
+    class Meta:
+        model = SqlWorkflow
+        fields = "__all__"
+
+
+class SqlWorkflowDetailSerializer(SqlWorkflowSerializer):
+    instance_name = serializers.CharField(source="instance.instance_name")
+    sql_content = serializers.CharField(source="sqlworkflowcontent.sql_content")
+    display_content = serializers.SerializerMethodField()
+
+    @extend_schema_field(
+        inline_serializer(
+            name="display_content",
+            fields={
+                "type": serializers.JSONField(),
+            },
+        )
+    )
+    def get_display_content(self, obj):
+        """获取工单详情用于列表展示的内容，区分不同的状态进行转换"""
+        if obj.status in ["workflow_finish", "workflow_exception"]:
+            rows = obj.sqlworkflowcontent.execute_result
+        else:
+            rows = obj.sqlworkflowcontent.review_content
+
+        review_result = ReviewSet()
+        if rows:
+            try:
+                # 检验rows能不能正常解析
+                loaded_rows = json.loads(rows)
+                #  兼容旧数据'[[]]'格式，转换为新格式[{}]
+                if isinstance(loaded_rows[-1], list):
+                    for r in loaded_rows:
+                        review_result.rows += [ReviewResult(inception_result=r)]
+                    rows = review_result.json()
+            except IndexError:
+                review_result.rows += [
+                    ReviewResult(
+                        id=1,
+                        sql=obj.sqlworkflowcontent.sql_content,
+                        errormessage="Json decode failed." "执行结果Json解析失败, 请联系管理员",
+                    )
+                ]
+                rows = review_result.json()
+            except json.decoder.JSONDecoder:
+                review_result.rows += [
+                    ReviewResult(
+                        id=1,
+                        sql=obj.sqlworkflowcontent.sql_content,
+                        # 迫于无法单元测试这里加上英文报错信息
+                        errormessage="Json decode failed." "执行结果Json解析失败, 请联系管理员",
+                    )
+                ]
+                rows = review_result.json()
+        else:
+            rows = obj.sqlworkflowcontent.review_content
+        return json.loads(rows)
+
+    def rollback_sql(self, obj):
+        try:
+            query_engine = get_engine(instance=obj.instance)
+            return query_engine.get_rollback(workflow=obj)
+        except Exception as msg:
+            logger.error(traceback.format_exc())
+            raise serializers.ValidationError({"errors": msg})
+
+    class Meta:
+        model = SqlWorkflow
+        fields = "__all__"
