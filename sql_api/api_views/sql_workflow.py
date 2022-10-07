@@ -93,7 +93,7 @@ class SqlWorkflowView(viewsets.ModelViewSet):
             pass
         # 非管理员，拥有审核权限、资源组粒度执行权限的，可以查看组内所有工单
         elif user.has_perm("sql.sql_review") or user.has_perm(
-                "sql.sql_execute_for_resource_group"
+            "sql.sql_execute_for_resource_group"
         ):
             filter_dict["group_id__in"] = [
                 group.group_id for group in user_groups(user)
@@ -109,7 +109,7 @@ class SqlWorkflowView(viewsets.ModelViewSet):
             return SqlWorkflowDetailSerializer
         return SqlWorkflowSerializer
 
-    @action(methods=['get'], detail=True)
+    @action(methods=["get"], detail=True)
     def rollback_sql(self, request, *args, **kwargs):
         obj = self.get_object()
         data = self.get_serializer().rollback_sql(obj)

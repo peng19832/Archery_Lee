@@ -100,8 +100,8 @@ def passed(request):
 
             # 按照审核结果更新业务表审核状态
             if (
-                    audit_result["data"]["workflow_status"]
-                    == WorkflowDict.workflow_status["audit_success"]
+                audit_result["data"]["workflow_status"]
+                == WorkflowDict.workflow_status["audit_success"]
             ):
                 # 将流程状态修改为审核通过
                 SqlWorkflow(id=workflow_id, status="workflow_review_pass").save(
@@ -139,8 +139,8 @@ def execute(request):
     """
     # 校验多个权限
     if not (
-            request.user.has_perm("sql.sql_execute")
-            or request.user.has_perm("sql.sql_execute_for_resource_group")
+        request.user.has_perm("sql.sql_execute")
+        or request.user.has_perm("sql.sql_execute_for_resource_group")
     ):
         raise PermissionDenied
     workflow_id = int(request.POST.get("workflow_id", 0))
@@ -226,8 +226,8 @@ def timing_task(request):
     """
     # 校验多个权限
     if not (
-            request.user.has_perm("sql.sql_execute")
-            or request.user.has_perm("sql.sql_execute_for_resource_group")
+        request.user.has_perm("sql.sql_execute")
+        or request.user.has_perm("sql.sql_execute_for_resource_group")
     ):
         raise PermissionDenied
     workflow_id = request.POST.get("workflow_id")
@@ -373,8 +373,8 @@ def cancel(request):
                 workflow_type=WorkflowDict.workflow_type["sqlreview"],
             )
             if audit_detail.current_status in (
-                    WorkflowDict.workflow_status["audit_abort"],
-                    WorkflowDict.workflow_status["audit_reject"],
+                WorkflowDict.workflow_status["audit_abort"],
+                WorkflowDict.workflow_status["audit_reject"],
             ):
                 async_task(
                     notify_for_audit,
