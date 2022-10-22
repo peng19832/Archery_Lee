@@ -16,10 +16,11 @@ from sql.utils.workflow_audit import Audit
 class SqlWorkFlowViewPermission(permissions.BasePermission):
     """SQL工单权限校验"""
 
-    message = "你无权操作当前工单"
+    message = "你没有获取工单列表的权限"
+    obj_message = "工单状态不正确或者你没有该工单的权限"
 
     def has_permission(self, request, view):
-        self.message = "你没有获取工单列表的权限"
+        self.message = self.message
         return any(
             [
                 request.user.has_perm("sql.menu_sqlworkflow"),
@@ -28,15 +29,15 @@ class SqlWorkFlowViewPermission(permissions.BasePermission):
         )
 
     def has_retrieve_permission(self, request, view, obj):
-        self.message = "你无权操作当前工单"
+        self.message = self.obj_message
         return can_view(request.user, obj.id)
 
     def has_rollback_sql_permission(self, request, view, obj):
-        self.message = "工单状态不正确或者你没有该工单的权限"
+        self.message = self.obj_message
         return can_rollback(request.user, obj.id)
 
     def has_alter_run_date_permission(self, request, view, obj):
-        self.message = "工单状态不正确或者你没有该工单的权限"
+        self.message = self.obj_message
         return Audit.can_review(request.user, obj.id, 2)
 
     def has_object_permission(self, request, view, obj):

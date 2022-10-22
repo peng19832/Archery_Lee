@@ -20,7 +20,7 @@ from sql.engines import get_engine
 from sql.models import SqlWorkflow
 from sql.utils.resource_group import user_groups
 from sql_api.filters import SqlWorkflowFilter
-from sql_api.pagination import BootStrapTablePagination
+from sql_api.pagination import CustomizedPagination, CustomizedPaginationV2
 from sql_api.permissions.sql_workflow import SqlWorkFlowViewPermission
 from sql_api.serializers.sql_workflow import (
     ExecuteCheckSerializer,
@@ -93,7 +93,7 @@ class ExecuteCheck(views.APIView):
 class SqlWorkflowView(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, SqlWorkFlowViewPermission]
     serializer_class = SqlWorkflowSerializer
-    pagination_class = BootStrapTablePagination
+    pagination_class = CustomizedPaginationV2
     filter_backends = [
         filters.SearchFilter,
         django_filters.rest_framework.DjangoFilterBackend,
